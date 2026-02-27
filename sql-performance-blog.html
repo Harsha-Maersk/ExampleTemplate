@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>30 Million Reads to 29 — A SQL Murder Mystery</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=JetBrains+Mono:wght@300;400;500&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --accent: #e8c547;
+    --accent2: #ff6b4a;
+    --accent3: #4affb4;
+    --text: #e8e4d9;
+    --text-muted: #7a7670;
+    --border: rgba(232, 197, 71, 0.15);
+    --code-bg: #0d0d14;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 19px;
+    line-height: 1.8;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px 40px 120px;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -300px; right: -300px;
+    width: 800px; height: 800px;
+    background: radial-gradient(circle, rgba(232,197,71,0.05) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -200px; left: -100px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(255,107,74,0.04) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  .hero-inner {
+    max-width: 860px;
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 48px;
+    animation: fadeUp 0.7s ease both;
+  }
+
+  .eyebrow-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent3);
+    border: 1px solid rgba(74,255,180,0.25);
+    padding: 5px 12px;
+  }
+
+  .eyebrow-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+  }
+
+  .hero h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(44px, 7vw, 88px);
+    font-weight: 900;
+    line-height: 1.0;
+    letter-spacing: -0.02em;
+    margin-bottom: 36px;
+    animation: fadeUp 0.7s ease 0.1s both;
+  }
+
+  .hero h1 .highlight { color: var(--accent); font-style: italic; }
+  .hero h1 .danger { color: var(--accent2); }
+
+  .hero-lead {
+    font-size: 22px;
+    color: var(--text-muted);
+    font-style: italic;
+    max-width: 580px;
+    line-height: 1.6;
+    animation: fadeUp 0.7s ease 0.2s both;
+    margin-bottom: 64px;
+  }
+
+  .hero-numbers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    max-width: 660px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    animation: fadeUp 0.7s ease 0.3s both;
+  }
+
+  .hero-num {
+    background: var(--bg);
+    padding: 28px 24px;
+    position: relative;
+  }
+
+  .hero-num::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+  }
+
+  .hero-num:nth-child(1)::before { background: var(--accent2); }
+  .hero-num:nth-child(2)::before { background: var(--accent); }
+  .hero-num:nth-child(3)::before { background: var(--accent3); }
+
+  .hero-num .val {
+    font-family: 'Playfair Display', serif;
+    font-size: 38px;
+    font-weight: 700;
+    display: block;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .hero-num:nth-child(1) .val { color: var(--accent2); }
+  .hero-num:nth-child(2) .val { color: var(--accent); }
+  .hero-num:nth-child(3) .val { color: var(--accent3); }
+
+  .hero-num .lbl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* CONTENT */
+  .content {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 80px 40px;
+  }
+
+  .section {
+    margin-bottom: 80px;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    max-width: 60px;
+  }
+
+  h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(28px, 3.5vw, 42px);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 28px;
+    letter-spacing: -0.01em;
+  }
+
+  h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 44px 0 16px;
+  }
+
+  p { margin-bottom: 22px; }
+
+  strong { color: var(--accent); font-weight: 600; }
+  em { font-style: italic; color: #c0bbb0; }
+
+  a { color: var(--accent3); text-decoration: none; border-bottom: 1px solid rgba(74,255,180,0.3); }
+  a:hover { border-bottom-color: var(--accent3); }
+
+  /* PULLQUOTE */
+  .pullquote {
+    margin: 48px -24px;
+    padding: 32px 48px;
+    background: var(--surface);
+    border-left: 4px solid var(--accent);
+    font-family: 'Playfair Display', serif;
+    font-size: 24px;
+    font-style: italic;
+    line-height: 1.45;
+    position: relative;
+  }
+
+  .pullquote::before {
+    content: '"';
+    position: absolute;
+    top: 8px; left: 36px;
+    font-size: 72px;
+    color: var(--accent);
+    opacity: 0.2;
+    line-height: 1;
+  }
+
+  /* CALLOUT BOXES */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent2);
+    padding: 24px 28px;
+    margin: 32px 0;
+    font-size: 17px;
+  }
+
+  .callout.green { border-left-color: var(--accent3); }
+  .callout.yellow { border-left-color: var(--accent); }
+
+  .callout-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    color: var(--accent2);
+  }
+
+  .callout.green .callout-title { color: var(--accent3); }
+  .callout.yellow .callout-title { color: var(--accent); }
+
+  /* CODE */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid rgba(232,197,71,0.4);
+    padding: 24px 28px;
+    overflow-x: auto;
+    margin: 28px 0;
+    position: relative;
+  }
+
+  .lang-label {
+    position: absolute;
+    top: 10px; right: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #b8cce0;
+  }
+
+  p code, li code {
+    background: var(--surface2);
+    padding: 2px 7px;
+    font-size: 14px;
+    color: var(--accent3);
+    border: 1px solid rgba(74,255,180,0.12);
+  }
+
+  .kw { color: #c792ea; }
+  .fn { color: #82aaff; }
+  .str { color: #c3e88d; }
+  .cm { color: #546e7a; font-style: italic; }
+  .num { color: #f78c6c; }
+  .type { color: #ffcb6b; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; margin: 36px 0; }
+
+  table { width: 100%; border-collapse: collapse; }
+
+  thead tr { background: var(--surface2); }
+
+  th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 14px 18px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 13px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .bad { color: var(--accent2); }
+  .good { color: var(--accent3); }
+  .neutral { color: var(--accent); }
+
+  /* DIVIDER */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin: 60px 0;
+    color: var(--text-muted);
+  }
+
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .divider span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+  }
+
+  /* EMOJI SECTION HEADERS (matching blog style) */
+  .emoji-head {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 700;
+    margin: 56px 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  /* FOOTER */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 60px 40px;
+    text-align: center;
+  }
+
+  .footer-inner {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .footer p {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+
+  .takeaway-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 32px 0;
+  }
+
+  .takeaway-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px;
+    font-size: 16px;
+  }
+
+  .takeaway-item .ti-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .takeaway-item .ti-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  ul, ol {
+    padding-left: 24px;
+    margin-bottom: 22px;
+  }
+
+  li {
+    margin-bottom: 10px;
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 640px) {
+    .hero { padding: 60px 24px 80px; }
+    .content { padding: 60px 24px; }
+    .hero-numbers { grid-template-columns: 1fr; }
+    .takeaway-grid { grid-template-columns: 1fr; }
+    .pullquote { margin: 32px 0; padding: 24px 28px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">
+      <span class="eyebrow-tag">SQL Performance</span>
+      <span class="eyebrow-meta">Performance Engineering · 8 min read</span>
+    </div>
+
+    <h1>
+      <span class="danger">30 Million</span> Reads<br>
+      Down to <span class="highlight">29</span>
+    </h1>
+
+    <p class="hero-lead">
+      How a scheduler that was timing out every day got 40x faster — and what the SQL optimizer was hiding from us all along.
+    </p>
+
+    <div class="hero-numbers">
+      <div class="hero-num">
+        <span class="val">30.8M</span>
+        <span class="lbl">Logical reads (before)</span>
+      </div>
+      <div class="hero-num">
+        <span class="val">25s → 1s</span>
+        <span class="lbl">Query time (prod)</span>
+      </div>
+      <div class="hero-num">
+        <span class="val">29</span>
+        <span class="lbl">Logical reads (after)</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- THE ALERT -->
+  <div class="section">
+    <div class="section-label">Chapter 01</div>
+    <h2>☕ A Familiar Morning</h2>
+
+    <p>It started like most production incidents do — not with an alarm, but with a quiet message in Teams.</p>
+
+    <p><em>"Hey, I went through the scheduler issue. I don't see anything was changed lately. So it's definitely not because of something introduced recently..."</em></p>
+
+    <p>The <strong>IssoSalesOrderScheduler</strong> was timing out. Every run. The 30-second database timeout was being hit consistently, and nobody could explain why — no recent deployments, no schema changes, no obvious suspects.</p>
+
+    <div class="callout">
+      <div class="callout-title">⚠️ The Setup</div>
+      The scheduler runs every <strong>15 minutes</strong>, fetching EquipmentTransportShipments (ETS) that had their rate details updated — then sending sales order messages for them. It had been running fine for months. Then one day: timeout.
+    </div>
+
+    <p>The first instinct is always <em>"what changed?"</em> When nothing changed, the answer is usually scarier: <strong>the data grew</strong>.</p>
+  </div>
+
+  <div class="divider"><span>the investigation</span></div>
+
+  <!-- THE QUERY -->
+  <div class="section">
+    <div class="section-label">Chapter 02</div>
+    <h2>🔍 Reading the Query</h2>
+
+    <p>The original EF Core query looked perfectly reasonable at a glance:</p>
+
+    <pre><code><span class="kw">var</span> equipmentTransportShipments = <span class="kw">await</span> context.EquipmentTransportShipments
+    .AsNoTracking()
+    .Include(ets => ets.IssoRateDetailSplits)
+    .ThenInclude(split => split.IssoRateDetail)
+    .Where(ets => !ets.IsDeleted && (ets.IssoRateDetailSplits
+        .Any(split =>
+            split.IssoRateDetail.UpdateDate >= updatedFrom &&
+            split.IssoRateDetail.UpdateDate &lt; updatedTo &&
+            split.IssoRateDetail.UpdatedBy !=
+                ConfigBase.FinOpsConstraints.ChargeItemTypeSAP)
+        || (ets.PricingSource == PricingSources.ATHENA &&
+            ets.FinOpsStatus == FinOpsStatus.RateReceived &&
+            ets.UpdateDate >= updatedFrom &&
+            ets.UpdateDate &lt; updatedTo)))
+    .ToListAsync();</code></pre>
+
+    <p>Start from ETS. Filter those whose rate details changed. Include the related data. Simple, readable, idiomatic EF Core.</p>
+
+    <p>Except SQL Server was translating this into something very different.</p>
+  </div>
+
+  <!-- SSMS REALITY -->
+  <div class="section">
+    <div class="section-label">Chapter 03</div>
+    <h2>🔬 Let's Check Reality in SSMS</h2>
+
+    <p>Running the equivalent SQL with <code>SET STATISTICS IO ON</code> revealed the truth immediately:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Table</th>
+            <th>Scan Count</th>
+            <th>Logical Reads</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IssoRateDetails</td>
+            <td class="bad">0*</td>
+            <td class="bad">4,429,244</td>
+          </tr>
+          <tr>
+            <td>IssoRateDetailSplits</td>
+            <td class="bad">262,170</td>
+            <td class="bad">796,711</td>
+          </tr>
+          <tr>
+            <td>EquipmentTransportShipments</td>
+            <td>1</td>
+            <td>1,040</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>* Scan count 0 with 4.4 million reads means individual seeks — one per row.</p>
+
+    <div class="pullquote">
+      IssoRateDetailSplits scanned 262,170 times. Once per ETS row. For a table with 131,000 records.
+    </div>
+
+    <p>SQL Server's optimizer had chosen a <strong>nested loop join</strong>: loop over every ETS row, check its splits, then look up each rate detail individually. The <code>.Any()</code> in LINQ compiled to an <code>EXISTS</code> subquery — and the optimizer decided the best plan was to evaluate it 131,000 times.</p>
+
+    <p>Only <strong>14 rows</strong> came back. We did 4.4 million reads to find 14 rows.</p>
+
+    <div class="callout">
+      <div class="callout-title">💡 The Key Insight</div>
+      For this 1-hour window, only <strong>96 rows</strong> in IssoRateDetails matched the date filter. The optimizer didn't know that — it was starting from the wrong end of the data.
+    </div>
+  </div>
+
+  <div class="divider"><span>the fix</span></div>
+
+  <!-- THE FIX -->
+  <div class="section">
+    <div class="section-label">Chapter 04</div>
+    <h2>🔄 Flipping the Join Direction</h2>
+
+    <p>The fix wasn't an index. The indexes were fine. The problem was the <strong>direction of traversal</strong>.</p>
+
+    <p>Instead of starting from 131K ETS rows and asking "does this ETS have any matching rate details?", we needed to start from the 96 matching rate detail rows and ask "which ETS do these belong to?"</p>
+
+    <p>The rewritten query — materialised in steps to force the optimizer's hand:</p>
+
+    <pre><code><span class="cm">-- Step 1: Start from the tiny filtered set (96 rows in a 1hr window)</span>
+<span class="kw">DECLARE</span> @matchedEtsIds <span class="type">TABLE</span> (EtsId <span class="type">BIGINT</span> <span class="kw">PRIMARY KEY</span>)
+
+<span class="kw">INSERT INTO</span> @matchedEtsIds
+<span class="kw">SELECT DISTINCT</span> split.EquipmentTransportShipmentId
+<span class="kw">FROM</span> IssoRateDetails rd
+<span class="kw">INNER JOIN</span> IssoRateDetailSplits split <span class="kw">ON</span> split.IssoRateDetailId = rd.Id
+<span class="kw">WHERE</span> rd.UpdateDate >= @updatedFrom
+  <span class="kw">AND</span> rd.UpdateDate &lt; @updatedTo
+  <span class="kw">AND</span> rd.UpdatedBy &lt;> <span class="str">'SAP'</span>
+
+<span class="cm">-- Step 2: Add the ATHENA branch</span>
+<span class="kw">INSERT INTO</span> @matchedEtsIds
+<span class="kw">SELECT</span> ets.Id
+<span class="kw">FROM</span> EquipmentTransportShipments ets
+<span class="kw">WHERE</span> ets.IsDeleted = <span class="num">0</span>
+  <span class="kw">AND</span> ets.PricingSource = <span class="num">2</span>
+  <span class="kw">AND</span> ets.FinOpsStatus = <span class="str">'RateReceived'</span>
+  <span class="kw">AND</span> ets.UpdateDate >= @updatedFrom
+  <span class="kw">AND</span> ets.UpdateDate &lt; @updatedTo
+  <span class="kw">AND</span> ets.Id <span class="kw">NOT IN</span> (<span class="kw">SELECT</span> EtsId <span class="kw">FROM</span> @matchedEtsIds)
+
+<span class="cm">-- Step 3: Fetch full data only for matched IDs</span>
+<span class="kw">SELECT</span> EtsId <span class="kw">FROM</span> @matchedEtsIds</code></pre>
+
+    <p>And in C# — three clean queries instead of one explosive join:</p>
+
+    <pre><code><span class="cm">// Step 1: ETS IDs from rate details branch</span>
+<span class="kw">var</span> etsIdsFromRateDetails = <span class="kw">await</span> context.IssoRateDetails
+    .AsNoTracking()
+    .Where(rd => !rd.IsDeleted &&
+                 rd.UpdateDate >= updatedFrom &&
+                 rd.UpdateDate &lt; updatedTo &&
+                 rd.UpdatedBy != ConfigBase.FinOpsConstraints.ChargeItemTypeSAP)
+    .SelectMany(rd => rd.IssoRateDetailsSplit)
+    .Select(split => split.EquipmentTransportShipmentId)
+    .Distinct()
+    .ToListAsync();
+
+<span class="cm">// Step 2: ETS IDs from ATHENA branch</span>
+<span class="kw">var</span> etsIdsFromAthena = <span class="kw">await</span> context.EquipmentTransportShipments
+    .AsNoTracking()
+    .Where(ets => !ets.IsDeleted &&
+                  ets.PricingSource == PricingSources.ATHENA &&
+                  ets.FinOpsStatus == FinOpsStatus.RateReceived &&
+                  ets.UpdateDate >= updatedFrom &&
+                  ets.UpdateDate &lt; updatedTo)
+    .Select(ets => ets.Id)
+    .ToListAsync();
+
+<span class="cm">// Step 3: Load full data with AsSplitQuery to avoid join explosion</span>
+<span class="kw">var</span> allEtsIds = etsIdsFromRateDetails.Union(etsIdsFromAthena).ToList();
+
+<span class="kw">var</span> equipmentTransportShipments = <span class="kw">await</span> context.EquipmentTransportShipments
+    .AsNoTracking()
+    .Where(x => allEtsIds.Contains(x.Id) && !x.IsDeleted)
+    .Include(x => x.IssoRateDetailSplits)
+    .ThenInclude(s => s.IssoRateDetail)
+    .AsSplitQuery()
+    .ToListAsync();</code></pre>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="section">
+    <div class="section-label">Chapter 05</div>
+    <h2>📊 The Numbers Don't Lie</h2>
+
+    <p>Dev environment, 1-hour window:</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Before</th>
+            <th>After</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IssoRateDetails reads</td>
+            <td class="bad">4,429,244</td>
+            <td class="good">8</td>
+            <td class="good">553,655x ↓</td>
+          </tr>
+          <tr>
+            <td>IssoRateDetailSplits scans</td>
+            <td class="bad">262,170</td>
+            <td class="good">2</td>
+            <td class="good">131,085x ↓</td>
+          </tr>
+          <tr>
+            <td>CPU time</td>
+            <td class="bad">5,141 ms</td>
+            <td class="good">125 ms</td>
+            <td class="good">41x faster</td>
+          </tr>
+          <tr>
+            <td>Elapsed time</td>
+            <td class="bad">5,142 ms</td>
+            <td class="good">127 ms</td>
+            <td class="good">40x faster</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>But dev has a fraction of production data. The real test was Prod.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Prod Before</th>
+            <th>Prod After</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>IssoRateDetails reads</td>
+            <td class="bad">30,802,062</td>
+            <td class="good">29</td>
+            <td class="good">1,062,829x ↓</td>
+          </tr>
+          <tr>
+            <td>ETS reads</td>
+            <td class="bad">127,948</td>
+            <td class="good">27</td>
+            <td class="good">4,738x ↓</td>
+          </tr>
+          <tr>
+            <td>CPU time</td>
+            <td class="bad">24,453 ms</td>
+            <td class="good">969 ms</td>
+            <td class="good">25x faster</td>
+          </tr>
+          <tr>
+            <td>Elapsed time</td>
+            <td class="bad">25,850 ms</td>
+            <td class="good">1,047 ms</td>
+            <td class="good">25x faster</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout green">
+      <div class="callout-title">✅ Production Result</div>
+      <strong>25 seconds → 1 second</strong> on the actual production window. The scheduler runs every 15 minutes. We now have 29 seconds of headroom where we had none.
+    </div>
+  </div>
+
+  <div class="divider"><span>lessons learned</span></div>
+
+  <!-- LESSONS -->
+  <div class="section">
+    <div class="section-label">Chapter 06</div>
+    <h2>💡 What We Learned</h2>
+
+    <h3>1. The optimizer is not magic</h3>
+    <p>SQL Server's query optimizer is excellent — but it makes decisions based on statistics. When you write <code>.Any()</code> in EF Core against a large table, the optimizer may choose a nested loop because it doesn't know how selective your filter actually is at runtime. Sometimes you have to make the plan explicit.</p>
+
+    <h3>2. Always start from the small end</h3>
+    <p>The golden rule: <strong>join from the smallest filtered set outward</strong>, never from the largest table inward. In our case, 96 matching IssoRateDetail rows → outward to splits → outward to ETS. Not 131K ETS rows → inward checking each one.</p>
+
+    <h3>3. STATISTICS IO is your best friend</h3>
+    <p>Before optimising anything, run <code>SET STATISTICS IO ON</code> and look at logical reads. Logical reads tell you the truth — how many data pages were touched. Scan count tells you how many times an index was traversed. These two numbers together reveal the entire story.</p>
+
+    <h3>4. AsSplitQuery() is not always enough</h3>
+    <p><code>AsSplitQuery()</code> avoids the cartesian product problem when loading related collections. But if the parent query itself generates a bad plan, <code>AsSplitQuery()</code> won't save you. Fix the root cause first.</p>
+
+    <h3>5. Data volume eventually wins</h3>
+    <p>The scheduler ran fine for months. No code changed. Then it started timing out. This is the natural lifecycle of a query that was always inefficient but not yet at scale. <strong>The code was the same. The data wasn't.</strong></p>
+
+    <div class="callout yellow">
+      <div class="callout-title">⚠️ Watch Out For</div>
+      If your scheduler fails to update its <code>LastExecutedTime</code> when no records are found, the query window keeps growing on every run. A scheduler that processes nothing for 2 hours will query a 2-hour window next time — potentially hitting timeout even with an optimised query.
+    </div>
+  </div>
+
+  <!-- FINAL NUMBERS -->
+  <div class="section">
+    <div class="section-label">Final Score</div>
+    <h2>🏁 The Scoreboard</h2>
+
+    <div class="takeaway-grid">
+      <div class="takeaway-item">
+        <span class="ti-num">1,062,829x</span>
+        <span class="ti-label">Fewer logical reads on IssoRateDetails (Prod)</span>
+      </div>
+      <div class="takeaway-item">
+        <span class="ti-num">25x</span>
+        <span class="ti-label">Faster query execution on Prod</span>
+      </div>
+      <div class="takeaway-item">
+        <span class="ti-num">0</span>
+        <span class="ti-label">New indexes required to achieve this</span>
+      </div>
+      <div class="takeaway-item">
+        <span class="ti-num">15 min</span>
+        <span class="ti-label">Normal scheduler window, now well within timeout</span>
+      </div>
+    </div>
+
+    <div class="pullquote">
+      The query was never wrong. It was just looking at the data from the wrong direction.
+    </div>
+
+    <p>Sometimes the best performance fix isn't a new index, a cache layer, or a hardware upgrade. Sometimes it's just asking the same question from a different angle — and letting the database do what it's already good at.</p>
+
+    <p>Check your slow queries. Run <code>STATISTICS IO</code>. Find out which direction they're reading from. The answer might surprise you.</p>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-inner">
+    <p>SQL Performance · FinOps Engineering</p>
+    <p style="margin-top:8px; font-size:13px;">
+      Tools used: SSMS · EF Core · SQL Server · C#
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
